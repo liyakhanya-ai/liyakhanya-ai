@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server'
-import * as pdfParse from 'pdf-parse'
 
 export async function POST(req: NextRequest) {
   try {
@@ -13,10 +12,11 @@ export async function POST(req: NextRequest) {
     const bytes = await file.arrayBuffer()
     const buffer = Buffer.from(bytes)
     
-    const pdfData = await pdfParse.default(buffer)
+    // Dynamic import fixes Vercel build
+    const pdfParse = (await import('pdf-parse')).default
+    const pdfData = await pdfParse(buffer)
     const text = pdfData.text
 
-    // Limit to 8000 chars for OpenAI context
     const trimmedText = text.slice(0, 8000)
 
     return NextResponse.json({ 
