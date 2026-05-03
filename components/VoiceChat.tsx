@@ -42,7 +42,7 @@ export default function VoiceChat({
     
     const utterance = new SpeechSynthesisUtterance(text)
     utterance.lang = 'en-ZA'
-    utterance.rate = 2.3
+    utterance.rate = 2
     utterance.onstart = () => setIsSpeaking(true)
     utterance.onend = () => setIsSpeaking(false)
     window.speechSynthesis.speak(utterance)
@@ -54,7 +54,7 @@ export default function VoiceChat({
         onClick={startListening}
         disabled={isListening}
         style={{
-          padding: '9px 16px',
+          padding: '8px 16px',
           borderRadius: '8px',
           fontWeight: '500',
           background: isListening? '#ef4444' : '#2563eb',
