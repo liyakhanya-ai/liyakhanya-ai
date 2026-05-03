@@ -12,9 +12,9 @@ export async function POST(req: NextRequest) {
     const bytes = await file.arrayBuffer()
     const buffer = Buffer.from(bytes)
     
-    // Dynamic import fixes Vercel build
-    const pdfParse = (await import('pdf-parse')).default
-    const pdfData = await pdfParse(buffer)
+    // Fixed: No .default needed
+    const pdfParse = await import('pdf-parse')
+    const pdfData = await pdfParse.default(buffer)
     const text = pdfData.text
 
     const trimmedText = text.slice(0, 8000)
