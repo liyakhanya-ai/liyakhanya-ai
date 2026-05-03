@@ -42,7 +42,7 @@ export default function VoiceChat({
     
     const utterance = new SpeechSynthesisUtterance(text)
     utterance.lang = 'en-ZA'
-    utterance.rate = 3
+    utterance.rate = 2.3
     utterance.onstart = () => setIsSpeaking(true)
     utterance.onend = () => setIsSpeaking(false)
     window.speechSynthesis.speak(utterance)
