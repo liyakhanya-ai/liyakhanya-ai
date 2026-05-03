@@ -1,0 +1,36 @@
+{
+  "name": "liyakhanya-analog-ai",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint"
+  },
+  "dependencies": {
+    "@pinecone-database/pinecone": "^7.2.0",
+    "@supabase/supabase-js": "^2.105.1",
+    "ai": "^6.0.174",
+    "dotenv": "^17.4.2",
+    "langchain": "^1.3.5",
+    "mammoth": "^1.12.0",
+    "next": "16.2.4",
+    "openai": "^6.35.0",
+    "pdf-parse": "^2.4.5",
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
+    "tiktoken": "^1.0.22"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/pdf-parse": "^1.1.5",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.2.4",
+    "tailwindcss": "^4",
+    "typescript": "^5"
+  }
+}
