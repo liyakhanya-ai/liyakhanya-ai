@@ -54,8 +54,8 @@ export default function VoiceChat({
         onClick={startListening}
         disabled={isListening}
         style={{
-          padding: '10px 16px',
-          borderRadius: '10px',
+          padding: '9px 16px',
+          borderRadius: '8px',
           fontWeight: '500',
           background: isListening? '#ef4444' : '#2563eb',
           color: 'white',
