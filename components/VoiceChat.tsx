@@ -1,52 +1,59 @@
 'use client'
 import { useState, useRef } from 'react'
+import ReactMarkdown from 'react-markdown'
+import remarkMath from 'remark-math'
+import rehypeKatex from 'rehype-katex'
+import 'katex/dist/katex.min.css'
 
 type Message = {
   role: 'user' | 'assistant'
   content: string
+  image?: string
 }
 
 export default function VoiceChat() {
-  const [messages, setMessages] = useState<Message[]>([])
+  const [messages, setMessages] = useState<Message[]>([
+    {
+      role: 'assistant',
+      content: 'Hi, I am **Liya the VarsityFriendly-AI** ⚡\n\nUpload a PDF or photo of your textbook and ask me anything about Electrical Technology, Math, or Physical Sciences.'
+    }
+  ])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
   const [pdfText, setPdfText] = useState('')
   const [pdfName, setPdfName] = useState('')
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const imageInputRef = useRef<HTMLInputElement>(null)
   const [isListening, setIsListening] = useState(false)
   const recognitionRef = useRef<any>(null)
 
-  // PDF Upload - WITH SIZE CHECK + ERROR HANDLING
   const handlePdfUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
-    
-    // Vercel free limit is 4.5MB. Check first.
-    if (file.size > 4 * 1024 * 1024) {
-      alert('❌ PDF too large. Max 4MB on Vercel free. Compress it first at ilovepdf.com/compress_pdf')
+
+    if (file.size > 4 * 1024) {
+      alert('❌ PDF too large. Max 4MB. Compress at ilovepdf.com/compress_pdf')
       if (fileInputRef.current) fileInputRef.current.value = ''
       return
     }
-    
+
     setLoading(true)
     const formData = new FormData()
     formData.append('file', file)
-    
+
     try {
       const res = await fetch('/api/pdf', { method: 'POST', body: formData })
-      
-      // Check if response failed before trying to parse JSON
       if (!res.ok) {
         const errorText = await res.text()
         if (errorText.includes('Request Entity Too Large') || res.status === 413) {
-          throw new Error('PDF too large. Max 4MB on Vercel free')
+          throw new Error('PDF too large. Max 4MB')
         }
         throw new Error(`Upload failed: ${res.status}`)
       }
-      
+
       const data = await res.json()
       if (data.error) throw new Error(data.error)
-      
+
       setPdfText(data.text)
       setPdfName(file.name)
       alert(`✅ Loaded: ${file.name} - ${data.pages} pages`)
@@ -57,25 +64,52 @@ export default function VoiceChat() {
     setLoading(false)
   }
 
-  // Send message with streaming
-  const sendMessage = async (text: string) => {
-    if (!text.trim() || loading) return
-    
-    const userMsg: Message = { role: 'user', content: text }
-    setMessages(prev => [...prev, userMsg])
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    if (file.size > 10 * 1024 * 1024) {
+      alert('❌ Image too large. Max 10MB')
+      if (imageInputRef.current) imageInputRef.current.value = ''
+      return
+    }
+
+    setLoading(true)
+    const reader = new FileReader()
+    reader.onloadend = async () => {
+      const base64 = reader.result as string
+      const userMsg: Message = {
+        role: 'user',
+        content: input || 'Explain this image',
+        image: base64
+      }
+      setMessages(prev => [...prev, userMsg])
+      setInput('')
+      await sendMessage(input || 'Explain this image and any formulas shown', base64)
+      if (imageInputRef.current) imageInputRef.current.value = ''
+    }
+    reader.readAsDataURL(file)
+  }
+
+  const sendMessage = async (text: string, imageBase64?: string) => {
+    if (!text.trim() &&!imageBase64 || loading) return
+
+    if (!imageBase64) {
+      const userMsg: Message = { role: 'user', content: text }
+      setMessages(prev => [...prev, userMsg])
+    }
     setInput('')
     setLoading(true)
-
-    // Add empty assistant message for streaming
     setMessages(prev => [...prev, { role: 'assistant', content: '' }])
 
     try {
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
+        body: JSON.stringify({
           message: text,
-          pdfContext: pdfText 
+          pdfContext: pdfText,
+          image: imageBase64
         })
       })
 
@@ -90,21 +124,20 @@ export default function VoiceChat() {
         if (done) break
         const chunk = decoder.decode(value)
         aiResponse += chunk
-        
+
         setMessages((prev: Message[]) => {
           const newMessages = [...prev]
-          newMessages[newMessages.length - 1] = { 
-            role: 'assistant', 
-            content: aiResponse 
+          newMessages[newMessages.length - 1] = {
+            role: 'assistant',
+            content: aiResponse
           }
           return newMessages
         })
       }
 
-      // TTS - speak the final answer
       if ('speechSynthesis' in window && aiResponse) {
-        speechSynthesis.cancel() // Stop any previous speech
-        const utterance = new SpeechSynthesisUtterance(aiResponse)
+        speechSynthesis.cancel()
+        const utterance = new SpeechSynthesisUtterance(aiResponse.replace(/\$.*?\$|\\\[.*?\\\]/g, ''))
         utterance.lang = 'en-ZA'
         speechSynthesis.speak(utterance)
       }
@@ -112,9 +145,9 @@ export default function VoiceChat() {
     } catch (err) {
       setMessages(prev => {
         const newMessages = [...prev]
-        newMessages[newMessages.length - 1] = { 
-          role: 'assistant', 
-          content: '❌ Error: Could not get response' 
+        newMessages[newMessages.length - 1] = {
+          role: 'assistant',
+          content: '❌ Error: Could not get response'
         }
         return newMessages
       })
@@ -122,10 +155,9 @@ export default function VoiceChat() {
     setLoading(false)
   }
 
-  // Mic input
   const toggleListening = () => {
     if (!('webkitSpeechRecognition' in window)) {
-      alert('Voice input not supported in this browser. Use Chrome.')
+      alert('Voice input not supported. Use Chrome.')
       return
     }
 
@@ -144,84 +176,60 @@ export default function VoiceChat() {
     }
     recognition.onerror = () => setIsListening(false)
     recognition.onend = () => setIsListening(false)
-    
+
     recognitionRef.current = recognition
     recognition.start()
     setIsListening(true)
   }
 
   return (
-    <div className="flex flex-col h-screen max-w-3xl mx-auto p-4">
-      <h1 className="text-2xl font-bold mb-4">Liyakhanya AI 📚</h1>
-      
-      {/* PDF Upload */}
-      <div className="mb-4 p-3 bg-gray-100 rounded">
-        <input 
-          type="file" 
-          accept=".pdf" 
-          ref={fileInputRef}
-          onChange={handlePdfUpload}
-          className="hidden" 
-        />
-        <button 
-          onClick={() => fileInputRef.current?.click()}
-          disabled={loading}
-          className="bg-blue-500 text-white px-4 py-2 rounded disabled:bg-gray-400"
-        >
-          {pdfName? `📄 ${pdfName}` : 'Upload Textbook PDF (Max 4MB)'}
+    <div className="flex flex-col h-screen max-w-4xl mx-auto p-4 font-sans">
+      <h1 className="text-3xl font-bold mb-4 text-center">Liyakhanya AI ⚡</h1>
+
+      <div className="mb-4 p-4 bg-gray-50 rounded-lg flex gap-2 flex-wrap">
+        <input type="file" accept=".pdf" ref={fileInputRef} onChange={handlePdfUpload} className="hidden" />
+        <input type="file" accept="image/*" ref={imageInputRef} onChange={handleImageUpload} className="hidden" />
+
+        <button onClick={() => fileInputRef.current?.click()} disabled={loading} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm disabled:bg-gray-400 transition">
+          {pdfName? `📄 ${pdfName.slice(0,20)}...` : 'Upload PDF'}
         </button>
+
+        <button onClick={() => imageInputRef.current?.click()} disabled={loading} className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm disabled:bg-gray-400 transition">
+          📸 Photo
+        </button>
+
         {pdfName && (
-          <button 
-            onClick={() => { setPdfText(''); setPdfName(''); }}
-            className="ml-2 text-red-500 text-sm"
-          >
-            Remove
+          <button onClick={() => { setPdfText(''); setPdfName(''); }} className="text-red-600 text-sm hover:underline">
+            Clear PDF
           </button>
         )}
       </div>
 
-      {/* Chat Messages */}
-      <div className="flex-1 overflow-y-auto mb-4 space-y-3">
-        {messages.length === 0 && (
-          <div className="text-gray-500 text-center mt-8">
-            Upload a CAPS textbook and ask me anything about Electrical Technology ⚡
-          </div>
-        )}
+      <div className="flex-1 overflow-y-auto mb-4 space-y-4 pr-2">
         {messages.map((msg, i) => (
-          <div 
-            key={i} 
-            className={`p-3 rounded-lg whitespace-pre-wrap ${msg.role === 'user' 
-            ? 'bg-blue-500 text-white ml-auto max-w-xs' 
-              : 'bg-gray-200 mr-auto max-w-xs'}`}
-          >
-            {msg.content || '...'}
+          <div key={i} className={`p-4 rounded-xl leading-relaxed ${msg.role === 'user'? 'bg-blue-600 text-white ml-auto max-w-[80%]' : 'bg-white border border-gray-200 mr-auto max-w-[80%] shadow-sm'}`}>
+            {msg.image && <img src={msg.image} alt="uploaded" className="mb-3 rounded-lg max-w-full" />}
+            <div className={`prose prose-sm max-w-none ${msg.role === 'user'? 'prose-invert' : ''}`}>
+              <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>
+                {msg.content || '...'}
+              </ReactMarkdown>
+            </div>
           </div>
         ))}
       </div>
 
-      {/* Input */}
       <div className="flex gap-2">
         <input
           type="text"
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && sendMessage(input)}
-          placeholder="Ask about Electrical Technology..."
-          className="flex-1 border p-2 rounded"
+          placeholder="Hi, I am Liya the VarsityFriendly-AI"
+          className="flex-1 border border-gray-300 p-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
           disabled={loading}
         />
-        <button 
-          onClick={() => sendMessage(input)}
-          disabled={loading}
-          className="bg-green-500 text-white px-4 py-2 rounded disabled:bg-gray-400"
-        >
-          Send
-        </button>
-        <button 
-          onClick={toggleListening}
-          disabled={loading}
-          className={`${isListening? 'bg-red-500' : 'bg-purple-500'} text-white px-4 py-2 rounded disabled:bg-gray-400`}
-        >
+        <button onClick={() => sendMessage(input)} disabled={loading} className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-3 rounded-lg disabled:bg-gray-400 transition">Send</button>
+        <button onClick={toggleListening} disabled={loading} className={`${isListening? 'bg-red-500' : 'bg-purple-600 hover:bg-purple-700'} text-white px-5 py-3 rounded-lg disabled:bg-gray-400 transition`}>
           {isListening? '🛑' : '🎤'}
         </button>
       </div>
