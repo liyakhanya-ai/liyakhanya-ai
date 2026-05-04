@@ -16,10 +16,17 @@ export default function VoiceChat() {
   const [isListening, setIsListening] = useState(false)
   const recognitionRef = useRef<any>(null)
 
-  // PDF Upload
+  // PDF Upload - WITH SIZE CHECK + ERROR HANDLING
   const handlePdfUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
+    
+    // Vercel free limit is 4.5MB. Check first.
+    if (file.size > 4 * 1024 * 1024) {
+      alert('❌ PDF too large. Max 4MB on Vercel free. Compress it first at ilovepdf.com/compress_pdf')
+      if (fileInputRef.current) fileInputRef.current.value = ''
+      return
+    }
     
     setLoading(true)
     const formData = new FormData()
@@ -27,8 +34,17 @@ export default function VoiceChat() {
     
     try {
       const res = await fetch('/api/pdf', { method: 'POST', body: formData })
-      const data = await res.json()
       
+      // Check if response failed before trying to parse JSON
+      if (!res.ok) {
+        const errorText = await res.text()
+        if (errorText.includes('Request Entity Too Large') || res.status === 413) {
+          throw new Error('PDF too large. Max 4MB on Vercel free')
+        }
+        throw new Error(`Upload failed: ${res.status}`)
+      }
+      
+      const data = await res.json()
       if (data.error) throw new Error(data.error)
       
       setPdfText(data.text)
@@ -36,6 +52,7 @@ export default function VoiceChat() {
       alert(`✅ Loaded: ${file.name} - ${data.pages} pages`)
     } catch (err: any) {
       alert(`❌ ${err.message}`)
+      if (fileInputRef.current) fileInputRef.current.value = ''
     }
     setLoading(false)
   }
@@ -62,6 +79,8 @@ export default function VoiceChat() {
         })
       })
 
+      if (!res.ok) throw new Error('Chat request failed')
+
       const reader = res.body?.getReader()
       const decoder = new TextDecoder()
       let aiResponse = ''
@@ -72,7 +91,6 @@ export default function VoiceChat() {
         const chunk = decoder.decode(value)
         aiResponse += chunk
         
-        // Update the last message with streamed content
         setMessages((prev: Message[]) => {
           const newMessages = [...prev]
           newMessages[newMessages.length - 1] = { 
@@ -84,7 +102,8 @@ export default function VoiceChat() {
       }
 
       // TTS - speak the final answer
-      if ('speechSynthesis' in window) {
+      if ('speechSynthesis' in window && aiResponse) {
+        speechSynthesis.cancel() // Stop any previous speech
         const utterance = new SpeechSynthesisUtterance(aiResponse)
         utterance.lang = 'en-ZA'
         speechSynthesis.speak(utterance)
@@ -106,7 +125,7 @@ export default function VoiceChat() {
   // Mic input
   const toggleListening = () => {
     if (!('webkitSpeechRecognition' in window)) {
-      alert('Voice input not supported in this browser')
+      alert('Voice input not supported in this browser. Use Chrome.')
       return
     }
 
@@ -149,25 +168,35 @@ export default function VoiceChat() {
           disabled={loading}
           className="bg-blue-500 text-white px-4 py-2 rounded disabled:bg-gray-400"
         >
-          {pdfName? `📄 ${pdfName}` : 'Upload Textbook PDF'}
+          {pdfName? `📄 ${pdfName}` : 'Upload Textbook PDF (Max 4MB)'}
         </button>
+        {pdfName && (
+          <button 
+            onClick={() => { setPdfText(''); setPdfName(''); }}
+            className="ml-2 text-red-500 text-sm"
+          >
+            Remove
+          </button>
+        )}
       </div>
 
       {/* Chat Messages */}
       <div className="flex-1 overflow-y-auto mb-4 space-y-3">
+        {messages.length === 0 && (
+          <div className="text-gray-500 text-center mt-8">
+            Upload a CAPS textbook and ask me anything about Electrical Technology ⚡
+          </div>
+        )}
         {messages.map((msg, i) => (
           <div 
             key={i} 
-            className={`p-3 rounded-lg ${msg.role === 'user' 
-             ? 'bg-blue-500 text-white ml-auto max-w-xs' 
+            className={`p-3 rounded-lg whitespace-pre-wrap ${msg.role === 'user' 
+            ? 'bg-blue-500 text-white ml-auto max-w-xs' 
               : 'bg-gray-200 mr-auto max-w-xs'}`}
           >
             {msg.content || '...'}
           </div>
         ))}
-        {loading && messages[messages.length - 1]?.role === 'user' && (
-          <div className="bg-gray-200 mr-auto max-w-xs p-3 rounded-lg">...</div>
-        )}
       </div>
 
       {/* Input */}
@@ -190,7 +219,8 @@ export default function VoiceChat() {
         </button>
         <button 
           onClick={toggleListening}
-          className={`${isListening? 'bg-red-500' : 'bg-purple-500'} text-white px-4 py-2 rounded`}
+          disabled={loading}
+          className={`${isListening? 'bg-red-500' : 'bg-purple-500'} text-white px-4 py-2 rounded disabled:bg-gray-400`}
         >
           {isListening? '🛑' : '🎤'}
         </button>
