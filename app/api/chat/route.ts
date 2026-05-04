@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import OpenAI from 'openai'
 
 const openai = new OpenAI({
@@ -11,20 +11,35 @@ export async function POST(req: NextRequest) {
 
     const systemPrompt = `You are Liyakhanya AI, a South African study partner for Grade 10-12. 
 Explain Electrical Technology, Math, and Physical Sciences simply.
-Use SA examples and CAPS curriculum.
-${pdfContext? `Base answers on this textbook: ${pdfContext.slice(0, 12000)}` : ''}`
+Use SA examples and CAPS curriculum. Keep answers under 150 words.
+${pdfContext? `Use this textbook: ${pdfContext.slice(0, 8000)}` : ''}`
 
-    const completion = await openai.chat.completions.create({
+    const stream = await openai.chat.completions.create({
       model: 'gpt-4o-mini',
       messages: [
         { role: 'system', content: systemPrompt },
-        { role: 'user', content: message || "Say hello" }
+        { role: 'user', content: message }
       ],
+      stream: true,
+      temperature: 0.7,
+      max_tokens: 300,
     })
 
-    return NextResponse.json({ response: completion.choices[0].message.content })
+    const encoder = new TextEncoder()
+    const readable = new ReadableStream({
+      async start(controller) {
+        for await (const chunk of stream) {
+          const text = chunk.choices[0]?.delta?.content || ''
+          controller.enqueue(encoder.encode(text))
+        }
+        controller.close()
+      },
+    })
+
+    return new Response(readable, {
+      headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+    })
   } catch (error) {
-    console.error(error)
-    return NextResponse.json({ error: 'Chat failed' }, { status: 500 })
+    return new Response('Chat failed', { status: 500 })
   }
 }
