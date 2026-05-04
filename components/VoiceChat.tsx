@@ -4,10 +4,10 @@ import ReactMarkdown from 'react-markdown'
 import remarkMath from 'remark-math'
 import rehypeKatex from 'rehype-katex'
 import 'katex/dist/katex.min.css'
-import dynamic from 'next/dynamic'
+import mermaid from 'mermaid'
 
-// Load mermaid client-side only
-const Mermaid = dynamic(() => import('@mermaid-js/mermaid-react').then(m => m.Mermaid), { ssr: false })
+// Initialize mermaid once
+mermaid.initialize({ startOnLoad: false, theme: 'default' })
 
 type Message = {
   role: 'user' | 'assistant'
@@ -19,7 +19,7 @@ export default function VoiceChat() {
   const [messages, setMessages] = useState<Message[]>([
     {
       role: 'assistant',
-      content: 'Hi, I am **Liya the VarsityFriendly-AI** ⚡\n\n**Let’s Solve Your Problem Together**\n\nI can draw tables, plot graphs with Mermaid, write code, and explain step-by-step. Upload a PDF or photo to start.'
+      content: 'Hi, I am **Liya the VarsityFriendly-AI** ⚡\n\n**Let’s Solve Your Problem Together**\n\nI can draw tables, plot graphs, write code, and explain step-by-step. Upload a PDF or photo to start.'
     }
   ])
   const [input, setInput] = useState('')
@@ -31,11 +31,16 @@ export default function VoiceChat() {
   const [isListening, setIsListening] = useState(false)
   const recognitionRef = useRef<any>(null)
 
+  // Re-render mermaid diagrams when messages change
+  useEffect(() => {
+    mermaid.contentLoaded()
+  }, [messages])
+
   const handlePdfUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
 
-    if (file.size > 4 * 1024 * 1024) {
+    if (file.size > 4 * 1024) {
       alert('❌ PDF too large. Max 4MB. Compress at ilovepdf.com/compress_pdf')
       if (fileInputRef.current) fileInputRef.current.value = ''
       return
@@ -72,7 +77,7 @@ export default function VoiceChat() {
     const file = e.target.files?.[0]
     if (!file) return
 
-    if (file.size > 10 * 1024) {
+    if (file.size > 10 * 1024 * 1024) {
       alert('❌ Image too large. Max 10MB')
       if (imageInputRef.current) imageInputRef.current.value = ''
       return
@@ -98,11 +103,10 @@ export default function VoiceChat() {
   const speakText = (text: string) => {
     if ('speechSynthesis' in window) {
       speechSynthesis.cancel()
-      // Strip markdown, LaTeX, code for TTS
       const cleanText = text.replace(/```[\s\S]*?```/g, ' code block ')
-       .replace(/\$.*?\$|\\\[.*?\\\]/g, '')
-       .replace(/\|.*\|/g, ' table ')
-       .replace(/[#*`_]/g, '')
+      .replace(/\$.*?\$|\\\[.*?\\\]/g, '')
+      .replace(/\|.*\|/g, ' table ')
+      .replace(/[#*`_]/g, '')
       const utterance = new SpeechSynthesisUtterance(cleanText)
       utterance.lang = 'en-ZA'
       speechSynthesis.speak(utterance)
@@ -154,7 +158,6 @@ export default function VoiceChat() {
         })
       }
 
-      // Only speak if user requested
       if (shouldSpeak) speakText(aiResponse)
 
     } catch (err) {
@@ -231,11 +234,10 @@ export default function VoiceChat() {
                 components={{
                   code({node, className, children,...props}) {
                     const match = /language-mermaid/.exec(className || '')
-                    return match? (
-                      <Mermaid chart={String(children).replace(/\n$/, '')} />
-                    ) : (
-                      <code className={className} {...props}>{children}</code>
-                    )
+                    if (match) {
+                      return <div className="mermaid">{String(children).replace(/\n$/, '')}</div>
+                    }
+                    return <code className={className} {...props}>{children}</code>
                   }
                 }}
               >
