@@ -1,9 +1,13 @@
 'use client'
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkMath from 'remark-math'
 import rehypeKatex from 'rehype-katex'
 import 'katex/dist/katex.min.css'
+import dynamic from 'next/dynamic'
+
+// Load mermaid client-side only
+const Mermaid = dynamic(() => import('@mermaid-js/mermaid-react').then(m => m.Mermaid), { ssr: false })
 
 type Message = {
   role: 'user' | 'assistant'
@@ -15,7 +19,7 @@ export default function VoiceChat() {
   const [messages, setMessages] = useState<Message[]>([
     {
       role: 'assistant',
-      content: 'Hi, I am **Liya the VarsityFriendly-AI** ⚡\n\nUpload a PDF or photo of your textbook and ask me anything about Electrical Technology, Math, or Physical Sciences.'
+      content: 'Hi, I am **Liya the VarsityFriendly-AI** ⚡\n\n**Let’s Solve Your Problem Together**\n\nI can draw tables, plot graphs with Mermaid, write code, and explain step-by-step. Upload a PDF or photo to start.'
     }
   ])
   const [input, setInput] = useState('')
@@ -31,7 +35,7 @@ export default function VoiceChat() {
     const file = e.target.files?.[0]
     if (!file) return
 
-    if (file.size > 4 * 1024) {
+    if (file.size > 4 * 1024 * 1024) {
       alert('❌ PDF too large. Max 4MB. Compress at ilovepdf.com/compress_pdf')
       if (fileInputRef.current) fileInputRef.current.value = ''
       return
@@ -68,7 +72,7 @@ export default function VoiceChat() {
     const file = e.target.files?.[0]
     if (!file) return
 
-    if (file.size > 10 * 1024 * 1024) {
+    if (file.size > 10 * 1024) {
       alert('❌ Image too large. Max 10MB')
       if (imageInputRef.current) imageInputRef.current.value = ''
       return
@@ -85,14 +89,29 @@ export default function VoiceChat() {
       }
       setMessages(prev => [...prev, userMsg])
       setInput('')
-      await sendMessage(input || 'Explain this image and any formulas shown', base64)
+      await sendMessage(input || 'Analyze this image, extract any tables, formulas, or draw a graph if needed', base64)
       if (imageInputRef.current) imageInputRef.current.value = ''
     }
     reader.readAsDataURL(file)
   }
 
+  const speakText = (text: string) => {
+    if ('speechSynthesis' in window) {
+      speechSynthesis.cancel()
+      // Strip markdown, LaTeX, code for TTS
+      const cleanText = text.replace(/```[\s\S]*?```/g, ' code block ')
+       .replace(/\$.*?\$|\\\[.*?\\\]/g, '')
+       .replace(/\|.*\|/g, ' table ')
+       .replace(/[#*`_]/g, '')
+      const utterance = new SpeechSynthesisUtterance(cleanText)
+      utterance.lang = 'en-ZA'
+      speechSynthesis.speak(utterance)
+    }
+  }
+
   const sendMessage = async (text: string, imageBase64?: string) => {
     if (!text.trim() &&!imageBase64 || loading) return
+    const shouldSpeak = text.toLowerCase().includes('read it') || text.toLowerCase().includes('speak')
 
     if (!imageBase64) {
       const userMsg: Message = { role: 'user', content: text }
@@ -135,12 +154,8 @@ export default function VoiceChat() {
         })
       }
 
-      if ('speechSynthesis' in window && aiResponse) {
-        speechSynthesis.cancel()
-        const utterance = new SpeechSynthesisUtterance(aiResponse.replace(/\$.*?\$|\\\[.*?\\\]/g, ''))
-        utterance.lang = 'en-ZA'
-        speechSynthesis.speak(utterance)
-      }
+      // Only speak if user requested
+      if (shouldSpeak) speakText(aiResponse)
 
     } catch (err) {
       setMessages(prev => {
@@ -207,13 +222,29 @@ export default function VoiceChat() {
 
       <div className="flex-1 overflow-y-auto mb-4 space-y-4 pr-2">
         {messages.map((msg, i) => (
-          <div key={i} className={`p-4 rounded-xl leading-relaxed ${msg.role === 'user'? 'bg-blue-600 text-white ml-auto max-w-[80%]' : 'bg-white border border-gray-200 mr-auto max-w-[80%] shadow-sm'}`}>
+          <div key={i} className={`p-4 rounded-xl leading-relaxed ${msg.role === 'user'? 'bg-blue-600 text-white ml-auto max-w-[85%]' : 'bg-white border border-gray-200 mr-auto max-w-[85%] shadow-sm'}`}>
             {msg.image && <img src={msg.image} alt="uploaded" className="mb-3 rounded-lg max-w-full" />}
             <div className={`prose prose-sm max-w-none ${msg.role === 'user'? 'prose-invert' : ''}`}>
-              <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>
+              <ReactMarkdown
+                remarkPlugins={[remarkMath]}
+                rehypePlugins={[rehypeKatex]}
+                components={{
+                  code({node, className, children,...props}) {
+                    const match = /language-mermaid/.exec(className || '')
+                    return match? (
+                      <Mermaid chart={String(children).replace(/\n$/, '')} />
+                    ) : (
+                      <code className={className} {...props}>{children}</code>
+                    )
+                  }
+                }}
+              >
                 {msg.content || '...'}
               </ReactMarkdown>
             </div>
+            {msg.role === 'assistant' && msg.content && (
+              <button onClick={() => speakText(msg.content)} className="mt-2 text-xs text-gray-500 hover:text-blue-600">🔊 Read it</button>
+            )}
           </div>
         ))}
       </div>

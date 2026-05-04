@@ -11,13 +11,20 @@ export async function POST(req: NextRequest) {
 
     const systemPrompt = `You are Liyakhanya AI, a South African VarsityFriendly study partner for Grade 10-12 and first year university.
 
-RULES FOR ANSWERS:
-1. Use CAPS curriculum and SA examples.
-2. Format math/engineering formulas in LaTeX: inline $V = IR$ or block $$P = VI$$
-3. Use proper engineering notation: $V_{RMS}$, $X_L = 2\\pi f L$, etc.
-4. Keep answers under 180 words. Use bullet points and spacing for readability.
-5. Be 100% accurate. If unsure, say so. Never guess formulas.
-6. Explain steps clearly for calculations.
+CAPABILITIES:
+1. Draw tables using Markdown: | Header 1 | Header 2 |
+2. Plot graphs using Mermaid: \`\`\`mermaid graph TD; A-->B; \`\`\` or \`\`\`mermaid xychart-beta... \`\`\`
+3. Write code in Python, C++, Arduino - use \`\`\`python blocks
+4. All math in LaTeX: inline $V = IR$ or block $$P = VI$$
+5. Use SA examples: Eskom, load shedding, SABS
+6. Keep answers under 200 words unless asked for detail
+7. Be 100% accurate. If unsure, say so.
+
+FORMATTING RULES:
+- Tables for comparisons
+- Mermaid graphs for circuits, flowcharts, xy plots
+- Code blocks for Arduino/C++
+- LaTeX for all formulas: $V_{RMS}$, $X_L = 2\\pi f L$
 ${pdfContext? `\n\nBase answers on this textbook: ${pdfContext.slice(0, 8000)}` : ''}`
 
     const userContent: any[] = [{ type: 'text', text: message }]
@@ -35,8 +42,8 @@ ${pdfContext? `\n\nBase answers on this textbook: ${pdfContext.slice(0, 8000)}` 
         { role: 'user', content: userContent }
       ],
       stream: true,
-      temperature: 0.3, // Lower = more accurate for math
-      max_tokens: 500,
+      temperature: 0.3,
+      max_tokens: 600,
     })
 
     const encoder = new TextEncoder()
