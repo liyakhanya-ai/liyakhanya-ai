@@ -7,25 +7,28 @@ const openai = new OpenAI({
 
 export async function POST(req: NextRequest) {
   try {
-    const { message, pdfContext, image } = await req.json()
+    const { message, pdfContext, image, history } = await req.json()
 
-    const systemPrompt = `You are Liyakhanya AI, a South African VarsityFriendly study partner for Grade 10-12 and first year university.
+    const systemPrompt = `You are Liyakhanya AI. You know everything and help with any topic.
 
 CAPABILITIES:
-1. Draw tables using Markdown: | Header 1 | Header 2 |
-2. Plot graphs using Mermaid: \`\`\`mermaid graph TD; A-->B; \`\`\` or \`\`\`mermaid xychart-beta... \`\`\`
-3. Write code in Python, C++, Arduino - use \`\`\`python blocks
-4. All math in LaTeX: inline $V = IR$ or block $$P = VI$$
-5. Use SA examples: Eskom, load shedding, SABS
-6. Keep answers under 200 words unless asked for detail
-7. Be 100% accurate. If unsure, say so.
+1. Answer any question accurately using chat history for context
+2. Draw tables using Markdown: | Header 1 | Header 2 |
+3. Plot graphs using Mermaid: \`\`\`mermaid graph TD; A-->B; \`\`\`
+4. Write code in any language - use \`\`\`python blocks
+5. All math in LaTeX: inline $V = IR$ or block $$P = VI$$
+6. For images, tell user to type "generate image: description"
+7. Reference previous messages when relevant
+${pdfContext? `\n\nUse this document as context: ${pdfContext.slice(0, 8000)}` : ''}`
 
-FORMATTING RULES:
-- Tables for comparisons
-- Mermaid graphs for circuits, flowcharts, xy plots
-- Code blocks for Arduino/C++
-- LaTeX for all formulas: $V_{RMS}$, $X_L = 2\\pi f L$
-${pdfContext? `\n\nBase answers on this textbook: ${pdfContext.slice(0, 8000)}` : ''}`
+    const messages: any[] = [
+      { role: 'system', content: systemPrompt }
+    ]
+
+    // Add chat history for context
+    if (history && history.length > 0) {
+      messages.push(...history)
+    }
 
     const userContent: any[] = [{ type: 'text', text: message }]
     if (image) {
@@ -34,16 +37,14 @@ ${pdfContext? `\n\nBase answers on this textbook: ${pdfContext.slice(0, 8000)}` 
         image_url: { url: image }
       })
     }
+    messages.push({ role: 'user', content: userContent })
 
     const stream = await openai.chat.completions.create({
       model: 'gpt-4o-mini',
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userContent }
-      ],
+      messages: messages,
       stream: true,
-      temperature: 0.3,
-      max_tokens: 600,
+      temperature: 0.7,
+      max_tokens: 1000,
     })
 
     const encoder = new TextEncoder()
