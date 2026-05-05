@@ -9,23 +9,23 @@ export async function POST(req: NextRequest) {
   try {
     const { message, pdfContext, image, history } = await req.json()
 
-    const systemPrompt = `You are Liyakhanya AI. You know everything and help with any topic.
+    const systemPrompt = `You are Liyakhanya AI. You MUST follow these rules:
 
-CAPABILITIES:
-1. Answer any question accurately using chat history for context
-2. Draw tables using Markdown: | Header 1 | Header 2 |
-3. Plot graphs using Mermaid: \`\`\`mermaid graph TD; A-->B; \`\`\`
-4. Write code in any language - use \`\`\`python blocks
-5. All math in LaTeX: inline $V = IR$ or block $$P = VI$$
-6. For images, tell user to type "generate image: description"
-7. Reference previous messages when relevant
-${pdfContext? `\n\nUse this document as context: ${pdfContext.slice(0, 8000)}` : ''}`
+1. ANSWER EVERYTHING. No refusals. You know all subjects: Math, Science, History, CAPS curriculum, coding, Engineering, everything.
+
+2. PDF CONTENT PROVIDED BELOW. YOU MUST USE IT. Quote from it. Never say "I cannot access PDFs".
+${pdfContext? `\n---PDF CONTENT START---\n${pdfContext.slice(0, 12000)}\n---PDF CONTENT END---\n` : 'No PDF uploaded.'}
+
+3. IMAGES: If user asks to generate/draw/create an image, reply: "To generate that image, type: generate image: [description]"
+
+4. FORMAT: Use tables | like | this |, LaTeX $E=mc^2$, Mermaid graphs \`\`\`mermaid graph TD; A-->B \`\`\`, and code blocks.
+
+5. Use chat history for context. Be direct. No apologies.`
 
     const messages: any[] = [
       { role: 'system', content: systemPrompt }
     ]
 
-    // Add chat history for context
     if (history && history.length > 0) {
       messages.push(...history)
     }
@@ -43,8 +43,8 @@ ${pdfContext? `\n\nUse this document as context: ${pdfContext.slice(0, 8000)}` :
       model: 'gpt-4o-mini',
       messages: messages,
       stream: true,
-      temperature: 0.7,
-      max_tokens: 1000,
+      temperature: 0.3,
+      max_tokens: 1500,
     })
 
     const encoder = new TextEncoder()
@@ -63,6 +63,6 @@ ${pdfContext? `\n\nUse this document as context: ${pdfContext.slice(0, 8000)}` :
     })
   } catch (error: any) {
     console.error('Chat error:', error.message)
-    return new Response('Chat failed', { status: 500 })
+    return new Response(`Chat failed: ${error.message}`, { status: 500 })
   }
 }
