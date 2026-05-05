@@ -25,6 +25,46 @@ const INITIAL_MESSAGE: Message = {
   content: 'Hi, I am **Liya** ⚡\n\n**Let’s Solve Your Problem Together**\n\nI can answer anything, take photos with your camera, draw tables, plot graphs, write code, generate images, and export to PDF. What do you need?'
 }
 
+// Compress image to under 1MB
+const compressImage = (file: File): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      const img = new Image()
+      img.onload = () => {
+        const canvas = document.createElement('canvas')
+        let width = img.width
+        let height = img.height
+
+        // Max 1920px width/height
+        const maxSize = 1920
+        if (width > maxSize || height > maxSize) {
+          if (width > height) {
+            height = (height / width) * maxSize
+            width = maxSize
+          } else {
+            width = (width / height) * maxSize
+            height = maxSize
+          }
+        }
+
+        canvas.width = width
+        canvas.height = height
+        const ctx = canvas.getContext('2d')
+        ctx?.drawImage(img, 0, 0, width, height)
+
+        // Compress to 0.8 quality JPEG
+        const compressed = canvas.toDataURL('image/jpeg', 0.8)
+        resolve(compressed)
+      }
+      img.onerror = reject
+      img.src = e.target?.result as string
+    }
+    reader.onerror = reject
+    reader.readAsDataURL(file)
+  })
+}
+
 export default function VoiceChat() {
   const [messages, setMessages] = useState<Message[]>([INITIAL_MESSAGE])
   const [input, setInput] = useState('')
@@ -69,7 +109,7 @@ export default function VoiceChat() {
   const startCamera = async () => {
     try {
       const mediaStream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment' } // Back camera on mobile
+        video: { facingMode: 'environment' }
       })
       setStream(mediaStream)
       setShowCamera(true)
@@ -102,7 +142,8 @@ export default function VoiceChat() {
     const ctx = canvas.getContext('2d')
     ctx?.drawImage(video, 0, 0)
 
-    const base64 = canvas.toDataURL('image/jpeg', 0.9)
+    // Compress camera photo too
+    const base64 = canvas.toDataURL('image/jpeg', 0.8)
     stopCamera()
 
     const userMsg: Message = {
@@ -157,16 +198,11 @@ export default function VoiceChat() {
     const file = e.target.files?.[0]
     if (!file) return
 
-    if (file.size > 10 * 1024 * 1024) {
-      alert('❌ Image too large. Max 10MB')
-      if (imageInputRef.current) imageInputRef.current.value = ''
-      return
-    }
-
     setLoading(true)
-    const reader = new FileReader()
-    reader.onloadend = async () => {
-      const base64 = reader.result as string
+    try {
+      // Compress image automatically
+      const base64 = await compressImage(file)
+
       const userMsg: Message = {
         role: 'user',
         content: input || 'Explain this image',
@@ -176,8 +212,10 @@ export default function VoiceChat() {
       setInput('')
       await sendMessage(input || 'Analyze this image', base64)
       if (imageInputRef.current) imageInputRef.current.value = ''
+    } catch (err: any) {
+      alert(`❌ Image failed: ${err.message}`)
     }
-    reader.readAsDataURL(file)
+    setLoading(false)
   }
 
   const generateImage = async (prompt: string) => {
