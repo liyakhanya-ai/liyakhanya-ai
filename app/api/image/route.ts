@@ -1,5 +1,7 @@
-import { NextRequest } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import OpenAI from 'openai'
+
+export const runtime = 'edge'
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -7,8 +9,21 @@ const openai = new OpenAI({
 
 export async function POST(req: NextRequest) {
   try {
+    if (!process.env.OPENAI_API_KEY) {
+      return NextResponse.json(
+        { error: 'OPENAI_API_KEY not configured' },
+        { status: 500 }
+      )
+    }
+
     const { prompt } = await req.json()
-    console.log('Generating image:', prompt)
+
+    if (!prompt) {
+      return NextResponse.json(
+        { error: 'No prompt provided' },
+        { status: 400 }
+      )
+    }
 
     const response = await openai.images.generate({
       model: "dall-e-3",
@@ -20,12 +35,19 @@ export async function POST(req: NextRequest) {
 
     const imageUrl = response.data?.[0]?.url
     if (!imageUrl) {
-      throw new Error('No image URL returned from OpenAI')
+      return NextResponse.json(
+        { error: 'OpenAI did not return image URL' },
+        { status: 500 }
+      )
     }
 
-    return Response.json({ url: imageUrl })
+    return NextResponse.json({ url: imageUrl })
+
   } catch (error: any) {
     console.error('DALL-E Error:', error)
-    return Response.json({ error: error.message }, { status: 500 })
+    return NextResponse.json(
+      { error: error.message || 'Image generation failed' },
+      { status: 500 }
+    )
   }
 }
