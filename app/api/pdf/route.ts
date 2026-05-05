@@ -1,32 +1,35 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
+// @ts-ignore - pdf-parse has no types
+import pdf from 'pdf-parse/lib/pdf-parse.js'
+
+export const config = {
+  api: {
+    bodyParser: {
+      sizeLimit: '20mb',
+    },
+  },
+}
 
 export async function POST(req: NextRequest) {
   try {
-    const data = await req.formData()
-    const file: File | null = data.get('file') as unknown as File
+    const formData = await req.formData()
+    const file = formData.get('file') as File
 
     if (!file) {
-      return NextResponse.json({ error: 'No file uploaded' }, { status: 400 })
+      return Response.json({ error: 'No file uploaded' }, { status: 400 })
     }
 
     const bytes = await file.arrayBuffer()
     const buffer = Buffer.from(bytes)
-    
-    // Fixed: Cast to any to bypass broken pdf-parse types
-    const pdfParseModule = await import('pdf-parse')
-    const pdfData = await (pdfParseModule as any).default(buffer)
-    const text = pdfData.text
 
-    const trimmedText = text.slice(0, 8000)
+    const data = await pdf(buffer)
 
-    return NextResponse.json({ 
-      success: true, 
-      text: trimmedText,
-      pages: pdfData.numpages,
-      filename: file.name
+    return Response.json({
+      text: data.text,
+      pages: data.numpages,
     })
-  } catch (error) {
-    console.error('PDF parse error:', error)
-    return NextResponse.json({ error: 'Failed to parse PDF' }, { status: 500 })
+  } catch (error: any) {
+    console.error('PDF Error:', error)
+    return Response.json({ error: error.message }, { status: 500 })
   }
 }
