@@ -1,5 +1,3 @@
-import pdf from 'pdf-parse/lib/pdf-parse.js'
-
 export const runtime = 'nodejs'
 export const maxDuration = 60
 
@@ -15,7 +13,6 @@ export async function POST(req: Request) {
       })
     }
 
-    // Check file size - 20MB limit
     if (file.size > 20 * 1024 * 1024) {
       return new Response(JSON.stringify({ error: 'File too large. Max 20MB.' }), { 
         status: 413,
@@ -23,6 +20,10 @@ export async function POST(req: Request) {
       })
     }
 
+    // Use require() for pdf-parse - avoids ESM issues with TS
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const pdf = require('pdf-parse')
+    
     const buffer = Buffer.from(await file.arrayBuffer())
     const data = await pdf(buffer)
     
