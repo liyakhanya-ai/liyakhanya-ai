@@ -20,14 +20,22 @@ export async function POST(req: Request) {
       })
     }
 
-    // Use require() for pdf-parse - avoids ESM issues with TS
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const pdf = require('pdf-parse')
-    
     const buffer = Buffer.from(await file.arrayBuffer())
-    const data = await pdf(buffer)
     
-    return new Response(JSON.stringify({ text: data.text }), {
+    // Use pdfjs-dist instead of pdf-parse
+    const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs')
+    const loadingTask = pdfjs.getDocument({ data: buffer })
+    const pdf = await loadingTask.promise
+    
+    let fullText = ''
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const page = await pdf.getPage(i)
+      const content = await page.getTextContent()
+      const pageText = content.items.map((item: any) => item.str).join(' ')
+      fullText += pageText + '\n'
+    }
+    
+    return new Response(JSON.stringify({ text: fullText }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' }
     })
