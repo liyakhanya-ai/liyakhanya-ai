@@ -1,35 +1,41 @@
-import { NextRequest } from 'next/server'
-// @ts-ignore - pdf-parse has no types
 import pdf from 'pdf-parse/lib/pdf-parse.js'
 
-export const config = {
-  api: {
-    bodyParser: {
-      sizeLimit: '20mb',
-    },
-  },
-}
+export const runtime = 'nodejs'
+export const maxDuration = 60
 
-export async function POST(req: NextRequest) {
+export async function POST(req: Request) {
   try {
     const formData = await req.formData()
     const file = formData.get('file') as File
-
+    
     if (!file) {
-      return Response.json({ error: 'No file uploaded' }, { status: 400 })
+      return new Response(JSON.stringify({ error: 'No file uploaded' }), { 
+        status: 400,
+        headers: { 'Content-Type': 'application/json' }
+      })
     }
 
-    const bytes = await file.arrayBuffer()
-    const buffer = Buffer.from(bytes)
+    // Check file size - 20MB limit
+    if (file.size > 20 * 1024 * 1024) {
+      return new Response(JSON.stringify({ error: 'File too large. Max 20MB.' }), { 
+        status: 413,
+        headers: { 'Content-Type': 'application/json' }
+      })
+    }
 
+    const buffer = Buffer.from(await file.arrayBuffer())
     const data = await pdf(buffer)
-
-    return Response.json({
-      text: data.text,
-      pages: data.numpages,
+    
+    return new Response(JSON.stringify({ text: data.text }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' }
     })
-  } catch (error: any) {
-    console.error('PDF Error:', error)
-    return Response.json({ error: error.message }, { status: 500 })
+    
+  } catch (error) {
+    console.error('PDF parsing error:', error)
+    return new Response(JSON.stringify({ error: 'Failed to parse PDF' }), { 
+      status: 500,
+      headers: { 'Content-Type': 'application/json' }
+    })
   }
 }
