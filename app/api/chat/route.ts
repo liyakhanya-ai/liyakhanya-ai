@@ -1,68 +1,52 @@
-import { NextRequest } from 'next/server'
-import OpenAI from 'openai'
+export const runtime = 'edge'
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-})
+export async function POST(req: Request) {
+  const { message } = await req.json()
 
-export async function POST(req: NextRequest) {
-  try {
-    const { message, pdfContext, image, history } = await req.json()
+  // Simple check: if message needs current info, search first
+  const needsSearch = /\b(time|date|weather|news|current|latest|today|now)\b/i.test(message)
 
-    const systemPrompt = `You are Liyakhanya AI. You MUST follow these rules:
-
-1. ANSWER EVERYTHING. No refusals. You know all subjects: Math, Science, History, CAPS curriculum, coding, Engineering, everything.
-
-2. PDF CONTENT PROVIDED BELOW. YOU MUST USE IT. Quote from it. Never say "I cannot access PDFs".
-${pdfContext? `\n---PDF CONTENT START---\n${pdfContext.slice(0, 12000)}\n---PDF CONTENT END---\n` : 'No PDF uploaded.'}
-
-3. IMAGES: If user asks to generate/draw/create an image, reply: "To generate that image, type: generate image: [description]"
-
-4. FORMAT: Use tables | like | this |, LaTeX $E=mc^2$, Mermaid graphs \`\`\`mermaid graph TD; A-->B \`\`\`, and code blocks.
-
-5. Use chat history for context. Be direct. No apologies.`
-
-    const messages: any[] = [
-      { role: 'system', content: systemPrompt }
-    ]
-
-    if (history && history.length > 0) {
-      messages.push(...history)
-    }
-
-    const userContent: any[] = [{ type: 'text', text: message }]
-    if (image) {
-      userContent.push({
-        type: 'image_url',
-        image_url: { url: image }
+  let searchContext = ''
+  if (needsSearch) {
+    try {
+      const searchRes = await fetch(`${process.env.VERCEL_URL? 'https://' + process.env.VERCEL_URL : 'http://localhost:3000'}/api/search`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: message })
       })
+      const { results } = await searchRes.json()
+      
+      if (results?.length) {
+        searchContext = `\n\nWeb search results:\n${results.map((r: any, i: number) => 
+          `${i + 1}. ${r.title}\n${r.snippet}\nSource: ${r.url}`
+        ).join('\n\n')}`
+      }
+    } catch (e) {
+      console.error('Search failed:', e)
     }
-    messages.push({ role: 'user', content: userContent })
-
-    const stream = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages: messages,
-      stream: true,
-      temperature: 0.3,
-      max_tokens: 1500,
-    })
-
-    const encoder = new TextEncoder()
-    const readable = new ReadableStream({
-      async start(controller) {
-        for await (const chunk of stream) {
-          const text = chunk.choices[0]?.delta?.content || ''
-          controller.enqueue(encoder.encode(text))
-        }
-        controller.close()
-      },
-    })
-
-    return new Response(readable, {
-      headers: { 'Content-Type': 'text/plain; charset=utf-8' },
-    })
-  } catch (error: any) {
-    console.error('Chat error:', error.message)
-    return new Response(`Chat failed: ${error.message}`, { status: 500 })
   }
+
+  // Now call your AI with search context
+  const systemPrompt = `You are Liyakhanya. Answer using the web search results if provided. Be concise. Current date: ${new Date().toDateString()}.${searchContext}`
+
+  // Replace this with your actual AI call - OpenAI, Anthropic, etc
+  const aiRes = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`
+    },
+    body: JSON.stringify({
+      model: 'gpt-4o-mini',
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: message }
+      ]
+    })
+  })
+
+  const aiData = await aiRes.json()
+  const reply = aiData.choices?.[0]?.message?.content || 'Sorry, I had an issue.'
+
+  return Response.json({ reply })
 }
