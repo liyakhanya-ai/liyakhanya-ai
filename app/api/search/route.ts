@@ -8,11 +8,15 @@ export async function POST(req: Request) {
       return Response.json({ error: 'No query provided' }, { status: 400 })
     }
 
+    if (!process.env.BRAVE_API_KEY) {
+      return Response.json({ error: 'BRAVE_API_KEY not configured' }, { status: 500 })
+    }
+
     const res = await fetch(`https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(query)}&count=5`, {
       headers: {
         'Accept': 'application/json',
         'Accept-Encoding': 'gzip',
-        'X-Subscription-Token': process.env.BRAVE_API_KEY!
+        'X-Subscription-Token': process.env.BRAVE_API_KEY
       }
     })
 
@@ -21,8 +25,6 @@ export async function POST(req: Request) {
     }
 
     const data = await res.json()
-    
-    // Extract just the useful bits
     const results = data.web?.results?.slice(0, 3).map((r: any) => ({
       title: r.title,
       snippet: r.description,

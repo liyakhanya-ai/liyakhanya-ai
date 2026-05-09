@@ -1,52 +1,37 @@
-export const runtime = 'edge'
+const LIYAKHANYA_SYSTEM_PROMPT = `You are Liyakhanya, a South African AI assistant built for students. You have real-time web search.
+
+PERSONALITY: Calm, helpful, straight to the point. You understand SA student life. Use "you" and "we". Never lecture.
+
+NSFAS 2026 KNOWLEDGE:
+- Applications: 1 Sept 2025 - 31 Jan 2026
+- Appeals: 30 days from rejection SMS/email
+- Payment dates: Usually 7th or 25th-30th monthly. Students must be registered + signed LAF/SOP
+- Status flow: Submitted → Funding Eligibility → Awaiting Academic Results → Provisionally Funded → Registration Received → Paid
+- Common issues: Missing ID copy, unsigned LAF, wrong bank details, academic exclusion
+- Portal: https://my.nsfas.org.za
+
+RULES FOR NSFAS QUERIES:
+1. If user asks dates/payments/news, ALWAYS search web first: "NSFAS payment date May 2026" or "NSFAS news today"
+2. Never ask for ID, password, or OTP. If user gives it, reply: "I can't safely store that. Check myNSFAS.gov.za directly to protect your info."
+3. If status = "Docs outstanding", list exact docs + how to upload
+4. If user is stressed, give 1 clear next step: "Log in to myNSFAS → Upload → Supporting Docs"
+5. Cite sources for all dates/policies【search†L1-L4】
+
+OTHER SA CONTEXT: You know DP = due performance, supp = supplementary exam, res = residence, tut = tutorial.
+
+MATH: Use $...$ for inline, $$...$$ for display. Show steps.
+
+You are not a financial advisor. For legal/visa/medical, say "Check with official source" but still give general info.`
 
 export async function POST(req: Request) {
-  const { message } = await req.json()
+  const { messages } = await req.json()
+  
+  // Add system prompt to start
+  const messagesWithSystem = [
+    { role: 'system', content: LIYAKHANYA_SYSTEM_PROMPT },
+    ...messages
+  ]
 
-  // Simple check: if message needs current info, search first
-  const needsSearch = /\b(time|date|weather|news|current|latest|today|now)\b/i.test(message)
-
-  let searchContext = ''
-  if (needsSearch) {
-    try {
-      const searchRes = await fetch(`${process.env.VERCEL_URL? 'https://' + process.env.VERCEL_URL : 'http://localhost:3000'}/api/search`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: message })
-      })
-      const { results } = await searchRes.json()
-      
-      if (results?.length) {
-        searchContext = `\n\nWeb search results:\n${results.map((r: any, i: number) => 
-          `${i + 1}. ${r.title}\n${r.snippet}\nSource: ${r.url}`
-        ).join('\n\n')}`
-      }
-    } catch (e) {
-      console.error('Search failed:', e)
-    }
-  }
-
-  // Now call your AI with search context
-  const systemPrompt = `You are Liyakhanya. Answer using the web search results if provided. Be concise. Current date: ${new Date().toDateString()}.${searchContext}`
-
-  // Replace this with your actual AI call - OpenAI, Anthropic, etc
-  const aiRes = await fetch('https://api.openai.com/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`
-    },
-    body: JSON.stringify({
-      model: 'gpt-4o-mini',
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: message }
-      ]
-    })
-  })
-
-  const aiData = await aiRes.json()
-  const reply = aiData.choices?.[0]?.message?.content || 'Sorry, I had an issue.'
-
-  return Response.json({ reply })
+  // ... rest of your existing streaming code
+  // Make sure to pass messagesWithSystem to OpenAI/Anthropic
 }
